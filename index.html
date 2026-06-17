@@ -141,8 +141,8 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:26px
   font-family:inherit;font-weight:800;font-size:16px;padding:9px 12px;box-shadow:0 3px 0 var(--ink);outline:none;}
 .namebox input:focus{background:#fff;}
 @media (max-width:560px){
-  .overlay{padding:16px;}
-  .scroll{padding:22px 20px;border-radius:12px;box-shadow:0 0 0 5px var(--rope),0 0 0 8px var(--ink),0 18px 40px rgba(0,0,0,.55);}
+  .overlay{padding:16px;align-items:flex-start;overflow-y:auto;}
+  .scroll{padding:22px 20px;border-radius:12px;max-height:none;box-shadow:0 0 0 5px var(--rope),0 0 0 8px var(--ink),0 18px 40px rgba(0,0,0,.55);}
   .scroll::before,.scroll::after{width:26px;height:26px;}
   .scroll::before{top:-13px;left:-13px;}
   .scroll::after{bottom:-13px;right:-13px;}
@@ -197,7 +197,8 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:26px
 <div class="overlay" id="startScreen">
   <div class="scroll">
     <h1>Pirate <span class="r">Parrot</span></h1>
-    <p class="sub" id="menuGreet">Choose yer waters, captain.</p>
+    <p class="sub" id="menuGreet" style="margin-bottom:6px;">Ahoy, captain!</p>
+    <p class="sub" id="menuDesc">Pirate Parrot is going to disclose your location to his master. Stop him before your location is exposed!! You miss three in a row, game over!!</p>
     <div class="modes">
       <button class="mode cake" data-mode="cake">
         <span class="mt">Piece of Cake</span>
@@ -480,10 +481,10 @@ function resize(){
   const portrait = H>=W;
   S = Math.max(0.5, Math.min(1.0, Math.min(W,H)/720));
   oceanY = H*(portrait?.70:.64);
-  const bw = Math.min(portrait?W*0.52:W*0.32, 240);
+  const bw = Math.min(W*0.5, 240*S);
   boat={x:W*.5, deckY:oceanY+4, w:bw};
-  sling={x:boat.x, y:boat.deckY - boat.w*0.18 - 14,
-         maxStretch:Math.max(90, Math.min(portrait?180:160, W*(portrait?0.36:0.24)))};
+  sling={x:boat.x, y:boat.deckY - boat.w*0.18 - 12*S,
+         maxStretch:Math.max(80, Math.min(portrait?170:150, W*(portrait?0.34:0.24)))};
   makeClouds(); makeRain();
   if(!aiming){ pull.x=sling.x; pull.y=sling.y; }
 }
@@ -676,7 +677,7 @@ $("pickBtn").addEventListener("click",()=>{
 function showMenu(){
   $("nameScreen").classList.remove("show");
   $("startScreen").classList.add("show");
-  $("menuGreet").textContent="Choose yer waters, Captain "+playerName+"!";
+  $("menuGreet").textContent="Ahoy, Captain "+playerName+"!";
   SND.start();
   $("menuMusic").textContent = musicOff ? "🎵 Music: Off" : "🎵 Music: On";
 }
