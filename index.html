@@ -89,7 +89,8 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:26px
 .modeline{font-weight:800;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:#7a4a22;margin:2px 0 0;}
 .verdict{font-weight:800;font-size:clamp(14px,2.5vw,18px);margin:14px 0 18px;}
 #hud{position:fixed;top:0;left:0;right:0;z-index:5;display:flex;justify-content:space-between;
-  align-items:flex-start;padding:14px 18px;pointer-events:none;opacity:0;transition:opacity .3s;}
+  align-items:flex-start;gap:6px;pointer-events:none;opacity:0;transition:opacity .3s;
+  padding:calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 10px calc(12px + env(safe-area-inset-left));}
 #hud.show{opacity:1;}
 .pill{background:var(--parchment);border:3px solid var(--ink);border-radius:10px;
   padding:5px 11px;font-weight:800;color:var(--ink);font-size:18px;
@@ -138,13 +139,31 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:26px
 .namebox input{width:100%;border:3px solid var(--ink);border-radius:10px;background:#fffaf0;color:var(--ink);
   font-family:inherit;font-weight:800;font-size:16px;padding:9px 12px;box-shadow:0 3px 0 var(--ink);outline:none;}
 .namebox input:focus{background:#fff;}
+@media (max-width:560px){
+  .overlay{padding:16px;}
+  .scroll{padding:22px 20px;border-radius:12px;box-shadow:0 0 0 5px var(--rope),0 0 0 8px var(--ink),0 18px 40px rgba(0,0,0,.55);}
+  .scroll::before,.scroll::after{width:26px;height:26px;}
+  .scroll::before{top:-13px;left:-13px;}
+  .scroll::after{bottom:-13px;right:-13px;}
+  .sub{font-size:13px;margin-bottom:14px;}
+  .pill{font-size:15px;padding:4px 9px;}
+  .pill .tag{font-size:8px;letter-spacing:.5px;}
+  #missPill #missDots{font-size:15px;}
+  .mode{padding:11px 14px;}
+  .mode .mt{font-size:23px;}
+  .btn{font-size:22px;padding:10px 24px;}
+  .btn.small{font-size:16px;padding:8px 18px;margin-top:12px;}
+  .cornerbtn,.sbtn{font-size:13px;padding:7px 13px;}
+  .pauseicon span{width:30px;height:96px;}
+  .pauseword{font-size:clamp(40px,14vw,64px);}
+}
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
 <div id="hud">
-  <div class="pill"><span class="tag">Parrots Hit</span><span id="scoreVal">0</span></div>
+  <div class="pill"><span class="tag">Current Score</span><span id="scoreVal">0</span></div>
   <div class="pill" id="missPill"><span class="tag">Parrots Missed</span><span id="missDots">•••</span></div>
   <div class="pill" id="bestPill"><span class="tag">Best Score</span><span id="bestVal">0</span></div>
 </div>
@@ -214,14 +233,13 @@ const SND = (() => {
   let ac=null, master, musicG, birdG, slingG, noise;
   let muted=false, mMusic=false, mBird=false, mSling=false, running=false, paused=false, step=0, nextT=0;
   const MG=.15, BG=.6, SG=.6;
-  const BPM=100, E=60/BPM/2;
+  const BPM=96, E=60/BPM/2;
   const hz = n => 440*Math.pow(2,(n-69)/12);
-  // Minor sea-shanty melody (eighths) with a "Dead Man's Chest" lilt — Yo-ho-ho!
-  const MEL=[69,69,72,72, 76,76,74,72, 71,71,72,69, 0,0,69,71,
-             76,76,76,72, 76,76,74,72, 71,69,67,69, 0,0,64,67];
-  // one chord per bar: Am - F - C - E (dramatic minor turnaround)
-  const CHORD=[[57,60,64],[53,57,60],[48,52,55],[52,56,59]];
-  const BROOT=[45,41,48,40];
+  // "Dead Man's Chest" style shanty (Dm): verse + "yo-ho-ho, bottle of rum" refrain
+  const MEL=[69,69,69,69, 74,72,69,0, 74,0,72,0, 69,67,65,62,
+             70,70,69,69, 74,72,70,0, 74,0,72,0, 69,67,65,62];
+  const CHORD=[[62,65,69],[57,61,64],[58,62,65],[57,61,64]]; // Dm  A  Bb  A
+  const BROOT=[50,45,46,45];
 
   function init(){
     if(ac) return;
@@ -243,77 +261,87 @@ const SND = (() => {
     g.gain.exponentialRampToValueAtTime(.0006,t+dur);
     o.connect(g); g.connect(dest); o.start(t); o.stop(t+dur+.03);
   }
-  function kick(t){
+  function kick(t,vol){
     const o=ac.createOscillator(); o.type="sine";
-    o.frequency.setValueAtTime(150,t);
-    o.frequency.exponentialRampToValueAtTime(45,t+.12);
+    o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(45,t+.12);
     const g=ac.createGain();
     g.gain.setValueAtTime(.0001,t);
-    g.gain.exponentialRampToValueAtTime(.9,t+.006);
+    g.gain.exponentialRampToValueAtTime(vol,t+.006);
     g.gain.exponentialRampToValueAtTime(.0008,t+.18);
     o.connect(g); g.connect(musicG); o.start(t); o.stop(t+.2);
   }
-  function snare(t){
+  function snare(t,vol){
     const s=ac.createBufferSource(); s.buffer=noise;
     const f=ac.createBiquadFilter(); f.type="bandpass"; f.frequency.value=1900; f.Q.value=.7;
     const g=ac.createGain();
     g.gain.setValueAtTime(.0001,t);
-    g.gain.exponentialRampToValueAtTime(.4,t+.005);
+    g.gain.exponentialRampToValueAtTime(vol,t+.005);
     g.gain.exponentialRampToValueAtTime(.0006,t+.14);
     s.connect(f); f.connect(g); g.connect(musicG); s.start(t); s.stop(t+.16);
-    const o=ac.createOscillator(); o.type="triangle";
-    o.frequency.setValueAtTime(330,t); o.frequency.exponentialRampToValueAtTime(180,t+.1);
-    const og=ac.createGain();
-    og.gain.setValueAtTime(.18,t); og.gain.exponentialRampToValueAtTime(.0006,t+.12);
-    o.connect(og); og.connect(musicG); o.start(t); o.stop(t+.13);
   }
-  function hat(t,v){
-    const s=ac.createBufferSource(); s.buffer=noise;
-    const f=ac.createBiquadFilter(); f.type="highpass"; f.frequency.value=8000;
-    const g=ac.createGain();
-    g.gain.setValueAtTime(v,t);
-    g.gain.exponentialRampToValueAtTime(.0004,t+.04);
-    s.connect(f); f.connect(g); g.connect(musicG); s.start(t); s.stop(t+.05);
-  }
-  function chordStab(notes,t,dur,vol){
-    const f=ac.createBiquadFilter(); f.type="lowpass"; f.frequency.value=1500; f.Q.value=.4;
+  function bodhran(t,vol){ // frame drum — low woody pulse
+    const o=ac.createOscillator(); o.type="sine";
+    o.frequency.setValueAtTime(95,t); o.frequency.exponentialRampToValueAtTime(58,t+.1);
     const g=ac.createGain();
     g.gain.setValueAtTime(.0001,t);
-    g.gain.linearRampToValueAtTime(vol,t+.02);
-    g.gain.setValueAtTime(vol,t+dur*.5);
-    g.gain.exponentialRampToValueAtTime(.0008,t+dur);
+    g.gain.exponentialRampToValueAtTime(vol,t+.005);
+    g.gain.exponentialRampToValueAtTime(.0008,t+.16);
+    o.connect(g); g.connect(musicG); o.start(t); o.stop(t+.18);
+    const s=ac.createBufferSource(); s.buffer=noise;
+    const f=ac.createBiquadFilter(); f.type="bandpass"; f.frequency.value=420; f.Q.value=1.2;
+    const sg=ac.createGain(); sg.gain.setValueAtTime(vol*.5,t); sg.gain.exponentialRampToValueAtTime(.0005,t+.06);
+    s.connect(f); f.connect(sg); sg.connect(musicG); s.start(t); s.stop(t+.08);
+  }
+  function tamb(t,v){ // tambourine shimmer
+    const s=ac.createBufferSource(); s.buffer=noise;
+    const f=ac.createBiquadFilter(); f.type="highpass"; f.frequency.value=6500;
+    const g=ac.createGain(); g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(.0004,t+.05);
+    s.connect(f); f.connect(g); g.connect(musicG); s.start(t); s.stop(t+.06);
+  }
+  function vaccordion(notes,t,dur,vol){ // tavern accordion chord
+    const f=ac.createBiquadFilter(); f.type="lowpass"; f.frequency.value=1700; f.Q.value=.5;
+    const g=ac.createGain();
+    g.gain.setValueAtTime(.0001,t);
+    g.gain.linearRampToValueAtTime(vol,t+.03);
+    g.gain.setValueAtTime(vol,t+dur*.7);
+    g.gain.exponentialRampToValueAtTime(.001,t+dur);
     f.connect(g); g.connect(musicG);
     for(const n of notes){
       const o=ac.createOscillator(); o.type="sawtooth"; o.frequency.value=hz(n);
-      const d=ac.createOscillator(); d.type="sawtooth"; d.frequency.value=hz(n)*1.006;
+      const d=ac.createOscillator(); d.type="sawtooth"; d.frequency.value=hz(n)*1.008;
       o.connect(f); d.connect(f);
-      o.start(t); o.stop(t+dur+.02); d.start(t); d.stop(t+dur+.02);
+      o.start(t); d.start(t); o.stop(t+dur+.02); d.stop(t+dur+.02);
     }
   }
-  function lead(n,t,dur){
-    const o=ac.createOscillator(); o.type="sawtooth"; o.frequency.value=hz(n);
-    const f=ac.createBiquadFilter(); f.type="lowpass"; f.frequency.value=2000; f.Q.value=.6;
+  function vchoir(n,t,dur,vol){ // gang-vocal "ahh"
+    const f=ac.createBiquadFilter(); f.type="lowpass"; f.frequency.value=1300; f.Q.value=.8;
     const g=ac.createGain();
     g.gain.setValueAtTime(.0001,t);
-    g.gain.exponentialRampToValueAtTime(.3,t+.015);
+    g.gain.linearRampToValueAtTime(vol,t+.04);
+    g.gain.setValueAtTime(vol,t+dur*.65);
     g.gain.exponentialRampToValueAtTime(.001,t+dur);
-    const l=ac.createOscillator(); l.type="sine"; l.frequency.value=5.5;
-    const lg=ac.createGain(); lg.gain.value=4;
-    l.connect(lg); lg.connect(o.frequency);
-    o.connect(f); f.connect(g); g.connect(musicG);
-    o.start(t); o.stop(t+dur+.03); l.start(t); l.stop(t+dur+.03);
+    f.connect(g); g.connect(musicG);
+    const o1=ac.createOscillator(); o1.type="sawtooth"; o1.frequency.value=hz(n);
+    const o2=ac.createOscillator(); o2.type="sawtooth"; o2.frequency.value=hz(n)*1.012;
+    const o3=ac.createOscillator(); o3.type="triangle"; o3.frequency.value=hz(n)*0.5;
+    const l=ac.createOscillator(); l.type="sine"; l.frequency.value=4.8;
+    const lg=ac.createGain(); lg.gain.value=hz(n)*0.005;
+    l.connect(lg); lg.connect(o1.frequency); lg.connect(o2.frequency);
+    o1.connect(f); o2.connect(f); o3.connect(f);
+    o1.start(t); o2.start(t); o3.start(t); l.start(t);
+    o1.stop(t+dur+.03); o2.stop(t+dur+.03); o3.stop(t+dur+.03); l.stop(t+dur+.03);
   }
   function emit(i,t){
     if(paused) return;
     i%=32;
     const bar=(i>>3)&3, beat=i%8;
-    if(beat===0||beat===4) kick(t);
-    if(beat===2||beat===6) snare(t);
-    hat(t, beat%2===0?.06:.09);
-    if(beat%2===0) tone(BROOT[bar], t, E*0.9, "triangle", .85, musicG);
-    if(beat===0) chordStab(CHORD[bar], t, E*3.4, .12);
-    if(beat===4) chordStab(CHORD[bar], t, E*1.6, .08);
-    if(MEL[i]>0) lead(MEL[i], t, E*.92);
+    if(beat===0||beat===4) kick(t,.7);
+    if(beat===2||beat===6){ snare(t,.3); tamb(t,.05); }
+    bodhran(t, beat%2===0 ? .3 : .16);
+    if(beat%2===0) tone(BROOT[bar], t, E*0.95, "triangle", .5, musicG);
+    if(beat===0) vaccordion(CHORD[bar], t, E*3.6, .12);
+    if(beat===4) vaccordion(CHORD[bar], t, E*1.7, .09);
+    if(MEL[i]>0){ vchoir(MEL[i], t, E*1.15, .17); vchoir(MEL[i]-12, t, E*1.15, .08); }
   }
   function pump(){ while(nextT<ac.currentTime+.12){ emit(step,nextT); nextT+=E; step++; } }
 
@@ -448,9 +476,13 @@ function resize(){
   canvas.width=W*DPR|0; canvas.height=H*DPR|0;
   canvas.style.width=W+"px"; canvas.style.height=H+"px";
   ctx.setTransform(DPR,0,0,DPR,0,0);
-  oceanY=H*.66;
-  boat={x:W*.5, deckY:oceanY+4, w:Math.min(240,W*.32)};
-  sling={x:boat.x, y:boat.deckY - boat.w*0.18 - 14, maxStretch:Math.max(90,Math.min(160,W*0.24))};
+  const portrait = H>=W;
+  oceanY = H*(portrait?.70:.64);
+  const bw = Math.min(portrait?W*0.52:W*0.32, 240);
+  boat={x:W*.5, deckY:oceanY+4, w:bw};
+  sling={x:boat.x, y:boat.deckY - boat.w*0.18 - 14,
+         maxStretch:Math.max(90, Math.min(portrait?180:160, W*(portrait?0.36:0.24)))};
+  makeClouds(); makeRain();
   if(!aiming){ pull.x=sling.x; pull.y=sling.y; }
 }
 
