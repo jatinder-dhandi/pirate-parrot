@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -468,7 +469,7 @@ const SND = (() => {
 /* ============ CANVAS & WORLD ============ */
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
-let W=0,H=0,DPR=1, oceanY=0, boat, sling;
+let W=0,H=0,DPR=1, oceanY=0, boat, sling, S=1;
 
 function resize(){
   DPR=Math.min(window.devicePixelRatio||1,2);
@@ -477,6 +478,7 @@ function resize(){
   canvas.style.width=W+"px"; canvas.style.height=H+"px";
   ctx.setTransform(DPR,0,0,DPR,0,0);
   const portrait = H>=W;
+  S = Math.max(0.5, Math.min(1.0, Math.min(W,H)/720));
   oceanY = H*(portrait?.70:.64);
   const bw = Math.min(portrait?W*0.52:W*0.32, 240);
   boat={x:W*.5, deckY:oceanY+4, w:bw};
@@ -701,7 +703,7 @@ function update(dt){
   waveT+=dt;
   for(const c of clouds){
     c.x+=c.v*dt;
-    if(c.x-100*c.s>W){ c.x=-100*c.s; c.y=rand(40,oceanY*.5); }
+    if(c.x-100*c.s*S>W){ c.x=-100*c.s*S; c.y=rand(40,oceanY*.5); }
   }
   if(mode.weather==="storm"){
     // random gusts: bursts of faster, heavier rain
@@ -760,7 +762,8 @@ function update(dt){
     b.vy+=GRAV*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt;
     if(parrot&&parrot.alive){
       const dx=b.x-parrot.x, dy=b.y-parrot.y;
-      if(dx*dx+dy*dy<(PR+5)*(PR+5)){ kill(parrot); b.life=0; }
+      const hr=PR*S + Math.max(5, boat.w*0.05);
+      if(dx*dx+dy*dy<hr*hr){ kill(parrot); b.life=0; }
     }
     if(b.life>0 && b.y>=oceanY-2 && b.vy>0){ splashFx(b.x,oceanY-2); b.life=0; }
   }
@@ -845,28 +848,28 @@ function drawSky(storm){
   const sx=W*.5, sy=oceanY-26;
   if(storm){
     // pale moon
-    const mx=W*.74, my=oceanY*.30, mr=27;
-    let g=ctx.createRadialGradient(mx,my,6,mx,my,112);
+    const mx=W*.74, my=oceanY*.30, mr=27*S;
+    let g=ctx.createRadialGradient(mx,my,6*S,mx,my,112*S);
     g.addColorStop(0,"rgba(228,234,255,.7)");
     g.addColorStop(1,"rgba(228,234,255,0)");
-    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(mx,my,112,0,7); ctx.fill();
-    let md=ctx.createRadialGradient(mx-8,my-8,4,mx,my,mr);
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(mx,my,112*S,0,7); ctx.fill();
+    let md=ctx.createRadialGradient(mx-8*S,my-8*S,4*S,mx,my,mr);
     md.addColorStop(0,"#fbfdff"); md.addColorStop(1,"#ccd5ea");
     ctx.fillStyle=md; ctx.beginPath(); ctx.arc(mx,my,mr,0,7); ctx.fill();
     ctx.fillStyle="rgba(150,160,188,.5)";
     [[-9,-7,5],[7,-3,4],[-3,9,6],[11,9,3],[3,-12,3]].forEach(([dx,dy,r])=>{
-      ctx.beginPath(); ctx.arc(mx+dx,my+dy,r,0,7); ctx.fill();
+      ctx.beginPath(); ctx.arc(mx+dx*S,my+dy*S,r*S,0,7); ctx.fill();
     });
-    ctx.strokeStyle="rgba(120,130,162,.35)"; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.arc(mx,my,mr-1,0.25,2.1); ctx.stroke();
+    ctx.strokeStyle="rgba(120,130,162,.35)"; ctx.lineWidth=2*S;
+    ctx.beginPath(); ctx.arc(mx,my,mr-1*S,0.25,2.1); ctx.stroke();
   } else {
-    let g=ctx.createRadialGradient(sx,sy,8,sx,sy,170);
+    let g=ctx.createRadialGradient(sx,sy,8*S,sx,sy,170*S);
     g.addColorStop(0,"rgba(255,238,170,.95)");
     g.addColorStop(.35,"rgba(255,190,90,.55)");
     g.addColorStop(1,"rgba(255,160,70,0)");
-    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(sx,sy,170,0,7); ctx.fill();
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(sx,sy,170*S,0,7); ctx.fill();
     ctx.fillStyle="#fff0c0";
-    ctx.beginPath(); ctx.arc(sx,sy,46,Math.PI,0); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx,sy,46*S,Math.PI,0); ctx.fill();
   }
 
   // stars
@@ -881,7 +884,7 @@ function drawSky(storm){
 }
 
 function cloud(x,y,s,storm){
-  ctx.save(); ctx.translate(x,y); ctx.scale(s,s);
+  ctx.save(); ctx.translate(x,y); ctx.scale(s*S,s*S);
   // lumpy top made of overlapping puffs, flat-ish shaded base — no bright inner spot
   const puffs=[[-48,8,20],[-26,-4,26],[-2,-12,30],[24,-6,26],[48,6,20],[14,10,24],[-18,12,22]];
   const top = storm ? "#5b6072" : "#f3ddc2";
@@ -923,10 +926,10 @@ function ocean(storm){
     ctx.save(); ctx.lineCap="round";
     for(let i=0;i<9;i++){
       const yy=oceanY+18+i*((H-oceanY)/10);
-      const wob=Math.sin(waveT*1.6+i*1.4)*16;
-      const wdt=46-i*3;
+      const wob=Math.sin(waveT*1.6+i*1.4)*16*S;
+      const wdt=(46-i*3)*S;
       ctx.globalAlpha=.5-.04*i;
-      ctx.strokeStyle="#ffd98e"; ctx.lineWidth=4;
+      ctx.strokeStyle="#ffd98e"; ctx.lineWidth=4*S;
       ctx.beginPath(); ctx.moveTo(sunX-wdt/2+wob,yy); ctx.lineTo(sunX+wdt/2+wob,yy); ctx.stroke();
     }
     ctx.restore();
@@ -949,7 +952,7 @@ function drawParrot(p){
   ctx.save();
   ctx.globalAlpha = mode.id==="fu" ? 0.8 : 1;
   ctx.translate(p.x,p.y);
-  ctx.scale(p.face,1);
+  ctx.scale(p.face*S, S);
   if(p.tilt) ctx.rotate(Math.max(-.45,Math.min(.45,p.tilt))*p.face);
 
   // long macaw tail, trailing behind (to the left)
@@ -1026,7 +1029,7 @@ function drawFx(){
   for(const f of fx){
     ctx.save();
     ctx.globalAlpha=Math.max(0,Math.min(1,f.life*(f.type==="drop"?1.6:.9)));
-    ctx.translate(f.x,f.y); ctx.rotate(f.rot||0);
+    ctx.translate(f.x,f.y); ctx.rotate(f.rot||0); ctx.scale(S,S);
     if(f.type==="wing"){
       ctx.fillStyle="#1f8fe0"; ctx.strokeStyle="#0f6fb0"; ctx.lineWidth=2;
       ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(-26,-6,-46,8);
@@ -1079,7 +1082,7 @@ function drawBoat(){
   ctx.beginPath(); ctx.moveTo(-w*.4,-h*.34); ctx.lineTo(-w*.4,-h*1.35); ctx.stroke();
   ctx.fillStyle="#5e3a1c";
   ctx.beginPath(); ctx.arc(-w*.4,-h*1.35,3.5,0,7); ctx.fill();
-  sailor(-w*.24,-h*.34);
+  ctx.save(); ctx.translate(-w*.24,-h*.34); ctx.scale(w/240,w/240); sailor(0,0); ctx.restore();
   ctx.restore();
 }
 
@@ -1101,28 +1104,30 @@ function sailor(x,y){
 function drawSling(){
   const a=slingAnchor();
   const rock = (state==="playing" && aiming) ? {x:pull.x,y:pull.y} : {x:a.x,y:a.y};
-  const forkBaseLen = boat.w*0.18 + 6;
+  const w=boat.w;
+  const forkBaseLen = w*0.18 + w*0.03;
+  const tw=w*0.13, th=w*0.055;          // fork tip offsets
+  const rr=Math.max(5, w*0.05);          // rock radius
+  const fwide=Math.max(3, w*0.035), bwide=Math.max(2.5, w*0.022), bo=rr*0.6;
   // fork, rotated with the boat so it rolls alongside it
   ctx.save(); ctx.translate(a.x,a.y); ctx.rotate(a.tilt);
-  ctx.strokeStyle="#5e3a1c"; ctx.lineWidth=7; ctx.lineCap="round";
-  ctx.beginPath(); ctx.moveTo(0,forkBaseLen); ctx.lineTo(0,2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0,2); ctx.lineTo(-17,-8); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0,2); ctx.lineTo(17,-8); ctx.stroke();
-  ctx.strokeStyle="#7c5226"; ctx.lineWidth=3;
-  ctx.beginPath(); ctx.moveTo(0,forkBaseLen); ctx.lineTo(0,2); ctx.stroke();
+  ctx.strokeStyle="#5e3a1c"; ctx.lineWidth=fwide; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(0,forkBaseLen); ctx.lineTo(0,th*0.3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,th*0.3); ctx.lineTo(-tw,-th); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,th*0.3); ctx.lineTo(tw,-th); ctx.stroke();
   ctx.restore();
   // fork-tip positions in screen space (for the elastic bands)
   const c=Math.cos(a.tilt), s=Math.sin(a.tilt);
   const tip=(lx,ly)=>({x:a.x+lx*c-ly*s, y:a.y+lx*s+ly*c});
-  const lTip=tip(-17,-8), rTip=tip(17,-8);
+  const lTip=tip(-tw,-th), rTip=tip(tw,-th);
   if(state==="playing" && loaded){
-    ctx.strokeStyle="#5b2f17"; ctx.lineWidth=4; ctx.lineCap="round";
-    ctx.beginPath(); ctx.moveTo(lTip.x,lTip.y); ctx.lineTo(rock.x-5,rock.y); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(rTip.x,rTip.y); ctx.lineTo(rock.x+5,rock.y); ctx.stroke();
-    const g=ctx.createRadialGradient(rock.x-3,rock.y-3,1,rock.x,rock.y,9);
+    ctx.strokeStyle="#5b2f17"; ctx.lineWidth=bwide; ctx.lineCap="round";
+    ctx.beginPath(); ctx.moveTo(lTip.x,lTip.y); ctx.lineTo(rock.x-bo,rock.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(rTip.x,rTip.y); ctx.lineTo(rock.x+bo,rock.y); ctx.stroke();
+    const g=ctx.createRadialGradient(rock.x-rr*0.35,rock.y-rr*0.35,1,rock.x,rock.y,rr*1.05);
     g.addColorStop(0,"#8a8490"); g.addColorStop(1,"#2a2630");
-    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(rock.x,rock.y,8.5,0,7); ctx.fill();
-    ctx.strokeStyle="#15121a"; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(rock.x,rock.y,rr,0,7); ctx.fill();
+    ctx.strokeStyle="#15121a"; ctx.lineWidth=Math.max(1,rr*0.18); ctx.stroke();
   }
 }
 
@@ -1139,19 +1144,20 @@ function drawPreview(){
     if(y>oceanY+8 || x<-20 || x>W+20) break;
     ctx.globalAlpha=Math.max(0,.7 - i*.024);
     ctx.fillStyle="#fff3d6";
-    ctx.beginPath(); ctx.arc(x,y,Math.max(1.2,4-i*0.09),0,7); ctx.fill();
+    ctx.beginPath(); ctx.arc(x,y,Math.max(1.2,(4-i*0.09)*S),0,7); ctx.fill();
   }
   ctx.restore();
 }
 
 function drawBalls(){
+  const rr=Math.max(5, boat.w*0.05);
   for(const b of balls){
     ctx.fillStyle="rgba(15,10,20,.25)";
-    ctx.beginPath(); ctx.arc(b.x-b.vx*.012,b.y-b.vy*.012,6,0,7); ctx.fill();
-    const g=ctx.createRadialGradient(b.x-2,b.y-2,1,b.x,b.y,7);
+    ctx.beginPath(); ctx.arc(b.x-b.vx*.012,b.y-b.vy*.012,rr*0.85,0,7); ctx.fill();
+    const g=ctx.createRadialGradient(b.x-rr*0.3,b.y-rr*0.3,1,b.x,b.y,rr);
     g.addColorStop(0,"#8a8490"); g.addColorStop(1,"#1b1822");
     ctx.fillStyle=g;
-    ctx.beginPath(); ctx.arc(b.x,b.y,7,0,7); ctx.fill();
+    ctx.beginPath(); ctx.arc(b.x,b.y,rr,0,7); ctx.fill();
   }
 }
 
