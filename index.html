@@ -117,8 +117,10 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:26px
 .cornerbtn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink);}
 .cornerbtn.on{display:block;}
 #pauseBtn{right:14px;bottom:calc(14px + env(safe-area-inset-bottom));}
-#sndbar{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:7;display:none;}
-#sndbar.on{display:block;}
+#sndbar{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:7;display:none;flex-direction:column;gap:8px;}
+#sndbar.on{display:flex;}
+.pickhdr{font-family:"Pirata One",cursive;font-size:26px;color:var(--rum);margin:10px 0 6px;line-height:1;}
+.menubtns{display:flex;flex-direction:column;align-items:center;}
 .sbtn{appearance:none;cursor:pointer;border:3px solid var(--ink);border-radius:12px;
   background:rgba(246,231,198,.92);color:var(--ink);font-weight:800;font-size:14px;
   padding:8px 16px;box-shadow:0 4px 0 var(--ink);min-width:104px;text-align:center;
@@ -172,7 +174,8 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:26px
 <div class="toast" id="toast"></div>
 <button id="pauseBtn" class="cornerbtn" aria-label="Pause">⏸ Pause</button>
 <div id="sndbar">
-  <button class="sbtn" id="muAll" aria-label="Toggle all sound">🔊 Sound</button>
+  <button class="sbtn" data-mute="music" aria-label="Toggle music">🎵 Music</button>
+  <button class="sbtn" data-mute="sfx" aria-label="Toggle sound effects">🔊 Sound</button>
 </div>
 <div id="pauseOverlay">
   <div class="pausebox">
@@ -199,6 +202,7 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:26px
     <h1>Pirate <span class="r">Parrot</span></h1>
     <p class="sub" id="menuGreet" style="margin-bottom:6px;">Ahoy, captain!</p>
     <p class="sub" id="menuDesc">Pirate Parrot is going to disclose your location to his master. Stop him before your location is exposed!! You miss three in a row, game over!!</p>
+    <p class="pickhdr">Pick your waters</p>
     <div class="modes">
       <button class="mode cake" data-mode="cake">
         <span class="mt">Piece of Cake</span>
@@ -210,7 +214,10 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:26px
         <span class="mt">Need bottle of rum!</span>
       </button>
     </div>
-    <button class="btn ghost small" id="menuMusic">🎵 Music: On</button>
+    <div class="menubtns">
+      <button class="btn ghost small" data-mute="music">🎵 Music: On</button>
+      <button class="btn ghost small" data-mute="sfx">🔊 Sound: On</button>
+    </div>
   </div>
 </div>
 
@@ -459,11 +466,10 @@ const SND = (() => {
       if(!running){ running=true; nextT=ac.currentTime+.08; setInterval(pump,25); } },
     setPaused(p){ paused=p; },
     sling, thwack, squawk, splash, thunder, chirp,
-    toggleMute(){ if(!ac) return muted; muted=!muted;
-      master.gain.setTargetAtTime(muted?0:.9, ac.currentTime,.02); return muted; },
-    toggleMusic(){ mMusic=!mMusic; if(musicG) musicG.gain.setTargetAtTime(mMusic?0:MG, ac.currentTime,.02); return mMusic; },
-    toggleBird(){ mBird=!mBird; if(birdG) birdG.gain.setTargetAtTime(mBird?0:BG, ac.currentTime,.02); return mBird; },
-    toggleSling(){ mSling=!mSling; if(slingG) slingG.gain.setTargetAtTime(mSling?0:SG, ac.currentTime,.02); return mSling; }
+    setMusic(off){ mMusic=off; if(musicG) musicG.gain.setTargetAtTime(off?0:MG, ac.currentTime,.02); },
+    setSfx(off){ mBird=off; mSling=off;
+      if(birdG) birdG.gain.setTargetAtTime(off?0:BG, ac.currentTime,.02);
+      if(slingG) slingG.gain.setTargetAtTime(off?0:SG, ac.currentTime,.02); }
   };
 })();
 
@@ -508,7 +514,7 @@ let rain=[], lightning=0, nextBolt=4, boltX=0;
 let rainBaseN=0, rainActive=0, rainMul=1, rainTarget=1, nextGust=6, gustT=0;
 const rand=(a,b)=>a+Math.random()*(b-a);
 let playerName=(function(){ try{ return localStorage.getItem('ppName')||""; }catch(e){ return ""; } })();
-let musicOff=false;
+let musicOff=false, sfxOff=false;
 
 function makeClouds(){
   clouds=[];
@@ -537,9 +543,9 @@ function spawnParrot(){
     d=Math.min(0.35, score*0.015);
     reverse=false;
   }
-  let v=rand(330+210*d, 580+250*d)*sw;
-  if(Math.random()<.22) v*=1.32;
-  if(mode.hard) v*=1.25;
+  let v=rand(270+150*d, 460+180*d)*sw;
+  if(Math.random()<.18) v*=1.2;
+  if(mode.hard) v*=1.12;
   const baseY=rand(60, oceanY*.5);
   parrot={
     x:-70, baseY, y:baseY, vx:v, dir:1, face:1,
@@ -567,12 +573,12 @@ function updateStrikes(){
 }
 
 function resetGame(){
-  score=0; streakMiss=0; balls=[]; fx=[]; respawnIn=0;
+  score=0; streakMiss=0; balls=[]; fx=[]; respawnIn=3; parrot=null;
   loaded=true; reloadT=0; aiming=false;
   pull.x=sling.x; pull.y=sling.y;
   lightning=0; nextBolt=rand(3,6);
   best=loadBest();
-  makeClouds(); makeRain(); spawnParrot();
+  makeClouds(); makeRain();
   scoreVal.textContent="0"; bestVal.textContent=best;
   updateStrikes();
 }
@@ -588,6 +594,7 @@ function startGame(modeId){
   resetGame(); state="playing";
   $("pauseBtn").classList.add("on");
   $("sndbar").classList.add("on");
+  toast("Get ready, gunner!");
 }
 
 function endGame(){
@@ -660,7 +667,8 @@ addEventListener("pointercancel",()=>{ if(aiming){ aiming=false; pull.x=sling.x;
 addEventListener("keydown",e=>{
   if(e.target && e.target.tagName==="INPUT") return;
   const k=e.key;
-  if(k==="m"||k==="M"){ const off=SND.toggleMute(); setAllSound(off); toast(off?"Sound off":"Sound on"); return; }
+  if(k==="m"||k==="M"){ musicOff=!musicOff; SND.setMusic(musicOff); applyAudioUI(); toast("Music "+(musicOff?"off":"on")); return; }
+  if(k==="n"||k==="N"){ sfxOff=!sfxOff; SND.setSfx(sfxOff); applyAudioUI(); toast("Sound "+(sfxOff?"off":"on")); return; }
   if((state==="playing"||state==="paused") && k==="Enter"){ e.preventDefault(); togglePause(); return; }
   if(state==="over" && (k==="r"||k==="R"||k==="Enter")){ startGame(mode.id); }
 });
@@ -679,7 +687,7 @@ function showMenu(){
   $("startScreen").classList.add("show");
   $("menuGreet").textContent="Ahoy, Captain "+playerName+"!";
   SND.start();
-  $("menuMusic").textContent = musicOff ? "🎵 Music: Off" : "🎵 Music: On";
+  applyAudioUI();
 }
 function commitName(){
   const nm=($("nameInput").value||"").trim();
@@ -690,14 +698,25 @@ function commitName(){
 $("nameInput").addEventListener("input",()=>{ $("nameGo").disabled=!$("nameInput").value.trim(); });
 $("nameInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); commitName(); } });
 $("nameGo").addEventListener("click",e=>{ e.preventDefault(); commitName(); });
-$("menuMusic").addEventListener("click",e=>{ e.preventDefault();
-  musicOff=SND.toggleMusic();
-  $("menuMusic").textContent = musicOff ? "🎵 Music: Off" : "🎵 Music: On";
-});
 $("pauseBtn").addEventListener("click",e=>{ e.preventDefault(); if(state==="playing"||state==="paused") togglePause(); });
 $("pauseOverlay").addEventListener("click",()=>{ if(state==="paused") togglePause(); });
-function setAllSound(off){ const b=$("muAll"); b.classList.toggle("off",off); b.textContent=off?"🔇 Sound":"🔊 Sound"; }
-$("muAll").addEventListener("click",e=>{ e.preventDefault(); setAllSound(SND.toggleMute()); });
+function applyAudioUI(){
+  document.querySelectorAll('[data-mute="music"]').forEach(b=>{
+    b.classList.toggle("off",musicOff);
+    b.textContent = b.classList.contains("sbtn") ? "🎵 Music" : ("🎵 Music: "+(musicOff?"Off":"On"));
+  });
+  document.querySelectorAll('[data-mute="sfx"]').forEach(b=>{
+    b.classList.toggle("off",sfxOff);
+    b.textContent = b.classList.contains("sbtn") ? "🔊 Sound" : ("🔊 Sound: "+(sfxOff?"Off":"On"));
+  });
+}
+document.querySelectorAll("[data-mute]").forEach(b=>{
+  b.addEventListener("click",e=>{ e.preventDefault();
+    if(b.dataset.mute==="music"){ musicOff=!musicOff; SND.setMusic(musicOff); }
+    else { sfxOff=!sfxOff; SND.setSfx(sfxOff); }
+    applyAudioUI();
+  });
+});
 
 /* ============ UPDATE ============ */
 function update(dt){
@@ -835,9 +854,9 @@ function draw(){
 function drawSky(storm){
   const sky=ctx.createLinearGradient(0,0,0,oceanY);
   if(storm){
-    sky.addColorStop(0,"#03040c");
-    sky.addColorStop(.5,"#070b1c");
-    sky.addColorStop(1,"#10162c");
+    sky.addColorStop(0,"#141029");
+    sky.addColorStop(.55,"#2e2747");
+    sky.addColorStop(1,"#6e5560");
   } else {
     sky.addColorStop(0,"#3b2a63");
     sky.addColorStop(.45,"#c4527a");
@@ -851,11 +870,11 @@ function drawSky(storm){
     // pale moon
     const mx=W*.74, my=oceanY*.30, mr=27*S;
     let g=ctx.createRadialGradient(mx,my,6*S,mx,my,112*S);
-    g.addColorStop(0,"rgba(228,234,255,.7)");
-    g.addColorStop(1,"rgba(228,234,255,0)");
+    g.addColorStop(0,"rgba(235,225,210,.45)");
+    g.addColorStop(1,"rgba(235,225,210,0)");
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(mx,my,112*S,0,7); ctx.fill();
     let md=ctx.createRadialGradient(mx-8*S,my-8*S,4*S,mx,my,mr);
-    md.addColorStop(0,"#fbfdff"); md.addColorStop(1,"#ccd5ea");
+    md.addColorStop(0,"#f3eede"); md.addColorStop(1,"#c7bfb0");
     ctx.fillStyle=md; ctx.beginPath(); ctx.arc(mx,my,mr,0,7); ctx.fill();
     ctx.fillStyle="rgba(150,160,188,.5)";
     [[-9,-7,5],[7,-3,4],[-3,9,6],[11,9,3],[3,-12,3]].forEach(([dx,dy,r])=>{
@@ -906,9 +925,9 @@ function cloud(x,y,s,storm){
 function ocean(storm){
   const sea=ctx.createLinearGradient(0,oceanY,0,H);
   if(storm){
-    sea.addColorStop(0,"#2c3350");
-    sea.addColorStop(.3,"#1c2740");
-    sea.addColorStop(1,"#0a1325");
+    sea.addColorStop(0,"#4a4566");
+    sea.addColorStop(.3,"#332f4e");
+    sea.addColorStop(1,"#161430");
   } else {
     sea.addColorStop(0,"#b35a52");
     sea.addColorStop(.25,"#5b4a78");
@@ -1209,6 +1228,7 @@ resize();
 best=loadBest(); bestVal.textContent=best;
 $("nameInput").value=playerName;
 $("nameGo").disabled=!playerName.trim();
+applyAudioUI();
 makeClouds(); makeRain(); spawnParrot();
 requestAnimationFrame(loop);
 })();
