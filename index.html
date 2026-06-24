@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -93,6 +92,9 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:26px
   align-items:flex-start;gap:6px;pointer-events:none;opacity:0;transition:opacity .3s;
   padding:calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 10px calc(12px + env(safe-area-inset-left));}
 #hud.show{opacity:1;}
+/* When the AdMob top banner is showing (native app only), push the score
+   pills down so the ~50px banner doesn't cover them. Tune 56px on device. */
+body.has-banner #hud{ padding-top: calc(56px + env(safe-area-inset-top)); }
 .pill{background:var(--parchment);border:3px solid var(--ink);border-radius:10px;
   padding:5px 11px;font-weight:800;color:var(--ink);font-size:18px;
   box-shadow:0 4px 0 var(--ink);display:flex;flex-direction:column;align-items:center;
@@ -211,7 +213,7 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:26px
         <span class="mt">Now We're Talkin'!</span>
       </button>
       <button class="mode fu" data-mode="fu">
-        <span class="mt">Need bottle of rum!</span>
+        <span class="mt">Need Bottle of Rum</span>
       </button>
     </div>
     <div class="menubtns">
@@ -473,6 +475,66 @@ const SND = (() => {
   };
 })();
 
+/* ============ ADS (AdMob top banner — native app only) ============ */
+/* Shows a banner at the top of the screen during play when the game is
+   running inside the Capacitor native app. On the plain web build (GitHub
+   Pages) window.Capacitor doesn't exist, so every method is a safe no-op. */
+const Ads = (() => {
+  const cap = window.Capacitor;
+  const native = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
+  const plat = (native && cap.getPlatform) ? cap.getPlatform() : "web";
+
+  /* Google's official TEST banner unit IDs — safe to run while developing.
+     >>> Before release: paste your real AdMob banner unit IDs below and
+         set USE_TEST = false. Never ship test IDs; never click your own real ads. */
+  const TEST_BANNER = {
+    ios:     "ca-app-pub-3940256099942544/2934735716",
+    android: "ca-app-pub-3940256099942544/6300978111"
+  };
+  const REAL_BANNER = {
+    ios:     "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX",
+    android: "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX"
+  };
+  const USE_TEST = true;
+  const ids = USE_TEST ? TEST_BANNER : REAL_BANNER;
+  const BANNER_ID = plat === "ios" ? ids.ios : ids.android;
+
+  let admob = null, ready = false, shown = false;
+
+  async function init(){
+    if(!native) return;
+    try{
+      admob = cap.Plugins && cap.Plugins.AdMob;
+      if(!admob) return;
+      /* iOS App Tracking Transparency prompt (no-op on Android / older plugins) */
+      try{ if(admob.requestTrackingAuthorization) await admob.requestTrackingAuthorization(); }catch(e){}
+      await admob.initialize({ initializeForTesting: USE_TEST });
+      ready = true;
+    }catch(e){ ready = false; }
+  }
+  async function showBanner(){
+    if(!native || !ready || shown || !admob) return;
+    try{
+      await admob.showBanner({
+        adId: BANNER_ID,
+        adSize: "BANNER",
+        position: "TOP_CENTER",
+        margin: 0,
+        isTesting: USE_TEST
+      });
+      shown = true;
+      document.body.classList.add("has-banner");
+    }catch(e){}
+  }
+  async function hideBanner(){
+    if(!native || !shown || !admob) return;
+    try{ await admob.hideBanner(); }catch(e){}
+    shown = false;
+    document.body.classList.remove("has-banner");
+  }
+  return { init, showBanner, hideBanner, get native(){ return native; } };
+})();
+
 /* ============ CANVAS & WORLD ============ */
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
@@ -499,7 +561,7 @@ function resize(){
 const MODES={
   cake:   {id:"cake",   name:"Piece of Cake",     hard:false, weather:"day"},
   talkin: {id:"talkin", name:"Now We're Talkin'!", hard:true,  weather:"day"},
-  fu:     {id:"fu",     name:"Need bottle of rum!", hard:true,  weather:"storm"}
+  fu:     {id:"fu",     name:"Need Bottle of Rum", hard:true,  weather:"storm"}
 };
 let mode=MODES.cake;
 
@@ -507,6 +569,7 @@ let mode=MODES.cake;
 const GRAV=820, POWER=9, MIN_STRETCH=14, RELOAD=0.45;
 const PR=26; // parrot hit radius
 let state="start", score=0, best=0, streakMiss=0;
+let topPad=0; /* px reserved at top for the AdMob banner (native only) */
 let balls=[], parrot=null, respawnIn=0, fx=[], clouds=[], waveT=0;
 let loaded=true, reloadT=0, aiming=false;
 const pull={x:0,y:0};
@@ -543,12 +606,22 @@ function spawnParrot(){
     d=Math.min(0.35, score*0.015);
     reverse=false;
   }
-  let v=rand(270+150*d, 460+180*d)*sw;
-  if(Math.random()<.18) v*=1.2;
-  if(mode.hard) v*=1.12;
-  const baseY=rand(60, oceanY*.5);
+  let v, speedVary=false, vmin=0, vmax=0;
+  if(mode.hard){
+    v=rand(270+150*d, 460+180*d)*sw;
+    if(Math.random()<.18) v*=1.2;
+    v*=1.12;
+  } else {
+    /* Piece of Cake: brisk, varied speeds that change randomly in flight */
+    vmin=rand(300,360)*sw;
+    vmax=rand(560,720)*sw;
+    v=rand(vmin, vmax);
+    speedVary=true;
+  }
+  const baseY=rand(60+topPad, oceanY*.5);
   parrot={
     x:-70, baseY, y:baseY, vx:v, dir:1, face:1,
+    speedVary, vmin, vmax, vTarget:v, retarget: speedVary?rand(.35,1.0):Infinity,
     amp:rand(10,20)+(mode.hard?56:36)*d, wf:rand(1.5,2.7), ph:rand(0,6.28),
     tilt:0, flap:rand(0,6.28), alive:true,
     reverse, nextJuke: reverse?rand(.5,1.4):Infinity, jukeT:0,
@@ -592,6 +665,7 @@ function startGame(modeId){
   $("pauseOverlay").classList.remove("show");
   $("hud").classList.add("show");
   resetGame(); state="playing";
+  Ads.showBanner(); topPad = Ads.native ? 56 : 0;
   $("pauseBtn").classList.add("on");
   $("sndbar").classList.add("on");
   toast("Get ready, gunner!");
@@ -599,6 +673,7 @@ function startGame(modeId){
 
 function endGame(){
   state="over";
+  Ads.hideBanner(); topPad=0;
   $("hud").classList.remove("show");
   $("pauseBtn").classList.remove("on");
   $("sndbar").classList.remove("on");
@@ -679,6 +754,7 @@ document.querySelectorAll(".mode").forEach(b=>{
 $("againBtn").addEventListener("click",()=>startGame(mode.id));
 $("pickBtn").addEventListener("click",()=>{
   state="start";
+  Ads.hideBanner(); topPad=0;
   $("overScreen").classList.remove("show");
   $("startScreen").classList.add("show");
 });
@@ -761,6 +837,14 @@ function update(dt){
           parrot.nextJuke=rand(.8,1.8);
         }
       }
+    }
+    if(parrot.speedVary){
+      parrot.retarget-=dt;
+      if(parrot.retarget<=0){
+        parrot.vTarget=rand(parrot.vmin, parrot.vmax);
+        parrot.retarget=rand(.4,1.1);
+      }
+      parrot.vx += (parrot.vTarget-parrot.vx)*Math.min(1,dt*4);
     }
     const vx=parrot.vx*(parrot.dir===-1?-0.7:1);
     parrot.face = parrot.dir===-1 ? -1 : 1;
@@ -1229,6 +1313,7 @@ best=loadBest(); bestVal.textContent=best;
 $("nameInput").value=playerName;
 $("nameGo").disabled=!playerName.trim();
 applyAudioUI();
+Ads.init();
 makeClouds(); makeRain(); spawnParrot();
 requestAnimationFrame(loop);
 })();
